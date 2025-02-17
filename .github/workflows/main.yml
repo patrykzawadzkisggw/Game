@@ -1,0 +1,114 @@
+name: Build project 😎
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build linux ✨
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Build project
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: StandaloneLinux64
+          allowDirtyBuild: true
+      - name: create zip
+        run: zip -r linux.zip build/StandaloneLinux64
+      - name: Create artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux.zip
+          path: linux.zip
+  build2:
+    name: Build windows ✨
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Build project
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: StandaloneWindows64
+          allowDirtyBuild: true
+      - name: create zip
+        run: zip -r windows.zip build/StandaloneWindows64
+      - name: Create artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows.zip
+          path: windows.zip
+  tag_and_release:
+    needs: [build, build2]
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Download Linux artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: linux.zip
+        path: .
+
+    - name: Download Windows artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: windows.zip
+        path: .
+
+    - name: Create tag
+      id: create_tag
+      run: |
+        TAG_NAME=$(date +'%Y%m%d%H%M%S')
+        echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
+        git tag $TAG_NAME
+        git push origin $TAG_NAME
+
+    - name: Create GitHub Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ env.TAG_NAME }}
+        release_name: Release ${{ env.TAG_NAME }}
+        draft: false
+        prerelease: false
+
+    - name: Upload Linux Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./linux.zip
+        asset_name: linux.zip
+        asset_content_type: application/octet-stream
+
+    - name: Upload Windows Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./windows.zip
+        asset_name: windows.zip
+        asset_content_type: application/octet-stream  
